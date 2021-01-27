@@ -38,6 +38,8 @@ function check_cors() {
     $AUTHORIZED_HOSTNAMES = array(
         $ipv4,
         $ipv6,
+        "127.0.0.1",
+        "::1",
         str_replace(array("[","]"), array("",""), $_SERVER["SERVER_NAME"]),
         "pi.hole",
         "localhost"
@@ -85,32 +87,10 @@ function check_cors() {
         if(!in_array($server_origin, $AUTHORIZED_HOSTNAMES)) {
             log_and_die("Failed CORS: " . $server_origin .' vs '. join(', ', $AUTHORIZED_HOSTNAMES));
         }
-        header("Access-Control-Allow-Origin: ${_SERVER['HTTP_ORIGIN']}");
+        $allow_origin = $_SERVER['HTTP_ORIGIN'];
+        header("Access-Control-Allow-Origin: ${allow_origin}");
     }
     // If there's no HTTP_ORIGIN, CORS should not be used
-}
-
-function check_csrf($token) {
-    // Check CSRF token
-    $session_started = function_exists("session_status") ?
-        session_status() == PHP_SESSION_ACTIVE :
-        session_id() == "";
-
-    if(!$session_started) {
-        session_start();
-    }
-
-    if(!isset($_SESSION['token'])) {
-        log_and_die("Session expired! Please re-login on the Pi-hole dashboard.");
-    }
-
-    if(empty($token)) {
-        log_and_die("Empty token! Check if cookies are enabled on your system.");
-    }
-
-    if(!hash_equals($_SESSION['token'], $token)) {
-        log_and_die("Wrong token! Please re-login on the Pi-hole dashboard.");
-    }
 }
 
 function check_domain(&$domains) {
@@ -136,7 +116,6 @@ function list_verify($type) {
     }
     elseif(isset($_POST['pw']))
     {
-        require("password.php");
         if($wrongpassword || !$auth)
         {
             log_and_die("Wrong password - ".htmlspecialchars($type)."listing of ".htmlspecialchars($_POST['domain'])." not permitted");

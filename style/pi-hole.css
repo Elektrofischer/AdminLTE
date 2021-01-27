@@ -304,6 +304,10 @@
   max-height: 400px;
 }
 
+.needs-auth {
+  display: none;
+}
+
 /* Work around code that expects icon fonts rather than SVG.
    Newer versions of AdminLTE have support for SVG icons,
    https://github.com/ColorlibHQ/AdminLTE/pull/2920

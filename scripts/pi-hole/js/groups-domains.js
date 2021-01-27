@@ -5,27 +5,13 @@
  *  This file is copyright under the latest version of the EUPL.
  *  Please see LICENSE file for your rights under this license. */
 
-/* global utils:false */
+/* global utils:false, group_utils: false */
 
 var table;
-var groups = [];
-var token = $("#token").text();
 var GETDict = {};
-var showtype = "all";
-
-function getGroups() {
-  $.post(
-    "scripts/pi-hole/php/groups.php",
-    { action: "get_groups", token: token },
-    function (data) {
-      groups = data.data;
-      initTable();
-    },
-    "json"
-  );
-}
 
 $(function () {
+  // We use the GETDict for possible domain highlighting
   window.location.search
     .substr(1)
     .split("&")
@@ -33,38 +19,39 @@ $(function () {
       GETDict[item.split("=")[0]] = item.split("=")[1];
     });
 
-  if ("type" in GETDict && (GETDict.type === "white" || GETDict.type === "black")) {
-    showtype = GETDict.type;
-  }
-
-  // sync description fields, reset inactive inputs on tab change
+  // sync input fields
   $('a[data-toggle="tab"]').on("shown.bs.tab", function () {
     var tabHref = $(this).attr("href");
     var val;
     if (tabHref === "#tab_domain") {
       val = $("#new_regex_comment").val();
       $("#new_domain_comment").val(val);
-      $("#new_regex").val("");
+      val = $("#new_regex").val();
+      $("#new_domain").val(val);
+      $("#displayType1").text("domain");
+      $("#displayType2").text("domain");
     } else if (tabHref === "#tab_regex") {
       val = $("#new_domain_comment").val();
       $("#new_regex_comment").val(val);
-      $("#new_domain").val("");
+      val = $("#new_domain").val();
+      $("#new_regex").val(val);
       $("#wildcard_checkbox").prop("checked", false);
+      $("#displayType1").text("regex");
+      $("#displayType2").text("regex");
     }
   });
 
-  $("#add2black, #add2white").on("click", addDomain);
+  $("#add2deny, #add2allow").on("click", addDomain);
 
   utils.setBsSelectDefaults();
-  getGroups();
+  group_utils.getGroups(initTable);
 });
 
-function initTable() {
+function initTable(groups) {
   table = $("#domainsTable").DataTable({
     ajax: {
-      url: "scripts/pi-hole/php/groups.php",
-      data: { action: "get_domains", showtype: showtype, token: token },
-      type: "POST"
+      url: "/api/domains",
+      dataSrc: "domains"
     },
     order: [[0, "asc"]],
     columns: [
@@ -73,7 +60,7 @@ function initTable() {
       { data: "type", searchable: false },
       { data: "enabled", searchable: false },
       { data: "comment" },
-      { data: "groups", searchable: false, visible: showtype === "all" },
+      { data: "groups[, ]", searchable: false },
       { data: null, width: "80px", orderable: false }
     ],
     drawCallback: function () {
@@ -83,6 +70,7 @@ function initTable() {
     },
     rowCallback: function (row, data) {
       $(row).attr("data-id", data.id);
+      $(row).attr("data-type", data.type);
       var tooltip =
         "Added: " +
         utils.datetime(data.date_added, false) +
@@ -100,42 +88,39 @@ function initTable() {
           "</code>"
       );
 
-      var whitelistOptions = "";
-      if (showtype === "all" || showtype === "white") {
-        whitelistOptions =
-          '<option value="0"' +
-          (data.type === 0 ? " selected" : "") +
-          ">Exact whitelist</option>" +
-          '<option value="2"' +
-          (data.type === 2 ? " selected" : "") +
-          ">Regex whitelist</option>";
-      }
+      var allowlistOptions =
+        '<option value="allow/exact"' +
+        (data.type === "allow/exact" ? " selected" : "") +
+        ">Allow (exact)</option>" +
+        '<option value="allow/regex"' +
+        (data.type === "allow/regex" ? " selected" : "") +
+        ">Allow (regex)</option>";
 
-      var blacklistOptions = "";
-      if (showtype === "all" || showtype === "black") {
-        blacklistOptions =
-          '<option value="1"' +
-          (data.type === 1 ? " selected " : " ") +
-          ">Exact blacklist</option>" +
-          '<option value="3"' +
-          (data.type === 3 ? " selected" : "") +
-          ">Regex blacklist</option>";
-      }
+      var denylistOptions =
+        '<option value="deny/exact"' +
+        (data.type === "deny/exact" ? " selected " : " ") +
+        ">Deny (exact)</option>" +
+        '<option value="deny/regex"' +
+        (data.type === "deny/regex" ? " selected" : "") +
+        ">Deny (regex)</option>";
 
       $("td:eq(1)", row).html(
         '<select id="type_' +
           data.id +
           '" class="form-control">' +
-          whitelistOptions +
-          blacklistOptions +
+          allowlistOptions +
+          denylistOptions +
           "</select>"
       );
       var typeEl = $("#type_" + data.id, row);
       typeEl.on("change", editDomain);
 
-      var disabled = data.enabled === 0;
       $("td:eq(2)", row).html(
-        '<input type="checkbox" id="status_' + data.id + '"' + (disabled ? "" : " checked") + ">"
+        '<input type="checkbox" id="status_' +
+          data.id +
+          '"' +
+          (data.enabled ? " checked" : "") +
+          ">"
       );
       var statusEl = $("#status_" + data.id, row);
       statusEl.bootstrapToggle({
@@ -152,71 +137,68 @@ function initTable() {
       commentEl.val(utils.unescapeHtml(data.comment));
       commentEl.on("change", editDomain);
 
-      // Show group assignment field only if in full domain management mode
-      if (table.column(5).visible()) {
-        $("td:eq(4)", row).empty();
-        $("td:eq(4)", row).append(
-          '<select class="selectpicker" id="multiselect_' + data.id + '" multiple></select>'
-        );
-        var selectEl = $("#multiselect_" + data.id, row);
-        // Add all known groups
-        for (var i = 0; i < groups.length; i++) {
-          var dataSub = "";
-          if (!groups[i].enabled) {
-            dataSub = 'data-subtext="(disabled)"';
-          }
-
-          selectEl.append(
-            $("<option " + dataSub + "/>")
-              .val(groups[i].id)
-              .text(groups[i].name)
-          );
+      $("td:eq(4)", row).empty();
+      $("td:eq(4)", row).append(
+        '<select class="selectpicker" id="multiselect_' + data.id + '" multiple></select>'
+      );
+      var selectEl = $("#multiselect_" + data.id, row);
+      // Add all known groups
+      for (var i = 0; i < groups.length; i++) {
+        var dataSub = "";
+        if (!groups[i].enabled) {
+          dataSub = 'data-subtext="(disabled)"';
         }
 
-        // Select assigned groups
-        selectEl.val(data.groups);
-        // Initialize bootstrap-select
-        selectEl
-          // fix dropdown if it would stick out right of the viewport
-          .on("show.bs.select", function () {
-            var winWidth = $(window).width();
-            var dropdownEl = $("body > .bootstrap-select.dropdown");
-            if (dropdownEl.length > 0) {
-              dropdownEl.removeClass("align-right");
-              var width = dropdownEl.width();
-              var left = dropdownEl.offset().left;
-              if (left + width > winWidth) {
-                dropdownEl.addClass("align-right");
-              }
-            }
-          })
-          .on("changed.bs.select", function () {
-            // enable Apply button
-            if ($(applyBtn).prop("disabled")) {
-              $(applyBtn)
-                .addClass("btn-success")
-                .prop("disabled", false)
-                .on("click", function () {
-                  editDomain.call(selectEl);
-                });
-            }
-          })
-          .on("hide.bs.select", function () {
-            // Restore values if drop-down menu is closed without clicking the Apply button
-            if (!$(applyBtn).prop("disabled")) {
-              $(this).val(data.groups).selectpicker("refresh");
-              $(applyBtn).removeClass("btn-success").prop("disabled", true).off("click");
-            }
-          })
-          .selectpicker()
-          .siblings(".dropdown-menu")
-          .find(".bs-actionsbox")
-          .prepend(
-            '<button type="button" id=btn_apply_' +
-              data.id +
-              ' class="btn btn-block btn-sm" disabled>Apply</button>'
-          );
+        selectEl.append(
+          $("<option " + dataSub + "/>")
+            .val(groups[i].id)
+            .text(groups[i].name)
+        );
       }
+
+      // Select assigned groups
+      selectEl.val(data.groups);
+      // Initialize bootstrap-select
+      selectEl
+        // fix dropdown if it would stick out right of the viewport
+        .on("show.bs.select", function () {
+          var winWidth = $(window).width();
+          var dropdownEl = $("body > .bootstrap-select.dropdown");
+          if (dropdownEl.length > 0) {
+            dropdownEl.removeClass("align-right");
+            var width = dropdownEl.width();
+            var left = dropdownEl.offset().left;
+            if (left + width > winWidth) {
+              dropdownEl.addClass("align-right");
+            }
+          }
+        })
+        .on("changed.bs.select", function () {
+          // enable Apply button
+          if ($(applyBtn).prop("disabled")) {
+            $(applyBtn)
+              .addClass("btn-success")
+              .prop("disabled", false)
+              .on("click", function () {
+                editDomain.call(selectEl);
+              });
+          }
+        })
+        .on("hide.bs.select", function () {
+          // Restore values if drop-down menu is closed without clicking the Apply button
+          if (!$(applyBtn).prop("disabled")) {
+            $(this).val(data.groups).selectpicker("refresh");
+            $(applyBtn).removeClass("btn-success").prop("disabled", true).off("click");
+          }
+        })
+        .selectpicker()
+        .siblings(".dropdown-menu")
+        .find(".bs-actionsbox")
+        .prepend(
+          '<button type="button" id=btn_apply_' +
+            data.id +
+            ' class="btn btn-block btn-sm" disabled>Apply</button>'
+        );
 
       var applyBtn = "#btn_apply_" + data.id;
 
@@ -259,8 +241,8 @@ function initTable() {
 
       // Reset visibility of ID column
       data.columns[0].visible = false;
-      // Show group assignment column only on full page
-      data.columns[5].visible = showtype === "all";
+      // Show group assignment column
+      data.columns[5].visible = true;
       // Apply loaded state to table
       return data;
     },
@@ -308,77 +290,53 @@ function addDomain() {
   var type;
 
   // current tab's inputs
-  var domainRegex, domainEl, commentEl;
+  var displayType, domainEl, commentEl;
   if (tabHref === "#tab_domain") {
-    domainRegex = "domain";
+    displayType = "domain";
     domainEl = $("#new_domain");
     commentEl = $("#new_domain_comment");
   } else if (tabHref === "#tab_regex") {
-    domainRegex = "regex";
+    displayType = "regex";
     domainEl = $("#new_regex");
     commentEl = $("#new_regex_comment");
   }
 
-  var domain = utils.escapeHtml(domainEl.val());
-  var comment = utils.escapeHtml(commentEl.val());
-
-  utils.disableAll();
-  utils.showAlert("info", "", "Adding " + domainRegex + "...", domain);
+  var domain = utils.escapeHtml(domainEl.val().trim());
+  var comment = utils.escapeHtml(commentEl.val().trim());
 
   if (domain.length > 0) {
-    // strip "*." if specified by user in wildcard mode
-    if (domainRegex === "domain" && wildcardChecked && domain.startsWith("*.")) {
-      domain = domain.substr(2);
+    if (wildcardChecked) {
+      // strip "*." if specified by user in wildcard mode
+      if (domain.startsWith("*.")) {
+        domain = domain.substr(2);
+      }
+
+      // Convert domain regex when wildcard domain is requested
+      domain = "(\\.|^)" + domain.replace(".", "\\.") + "$";
+      displayType = "regex";
     }
 
     // determine list type
-    if (domainRegex === "domain" && action === "add2black" && wildcardChecked) {
-      type = "3W";
-    } else if (domainRegex === "domain" && action === "add2black" && !wildcardChecked) {
-      type = "1";
-    } else if (domainRegex === "domain" && action === "add2white" && wildcardChecked) {
-      type = "2W";
-    } else if (domainRegex === "domain" && action === "add2white" && !wildcardChecked) {
-      type = "0";
-    } else if (domainRegex === "regex" && action === "add2black") {
-      type = "3";
-    } else if (domainRegex === "regex" && action === "add2white") {
-      type = "2";
-    }
+    type = action === "add2allow" ? "allow" : "deny";
+
+    type += displayType === "domain" ? "/exact" : "/regex";
   } else {
-    utils.enableAll();
-    utils.showAlert("warning", "", "Warning", "Please specify a " + domainRegex);
+    utils.showAlert("warning", "", "Warning", "Please specify a " + displayType);
     return;
   }
 
-  $.ajax({
-    url: "scripts/pi-hole/php/groups.php",
-    method: "post",
-    dataType: "json",
-    data: {
-      action: "add_domain",
-      domain: domain,
-      type: type,
-      comment: comment,
-      token: token
-    },
-    success: function (response) {
-      utils.enableAll();
-      if (response.success) {
-        utils.showAlert("success", "fas fa-plus", "Success!", response.message);
-        domainEl.val("");
-        commentEl.val("");
-        wildcardEl.prop("checked", false);
-        table.ajax.reload(null, false);
-      } else {
-        utils.showAlert("error", "", "Error while adding new " + domainRegex, response.message);
-      }
-    },
-    error: function (jqXHR, exception) {
-      utils.enableAll();
-      utils.showAlert("error", "", "Error while adding new " + domainRegex, jqXHR.responseText);
-      console.log(exception); // eslint-disable-line no-console
-    }
+  var data = JSON.stringify({
+    item: domain,
+    comment: comment,
+    enabled: true
+  });
+
+  var url = "/api/domains/" + type;
+  group_utils.addEntry(url, domain, displayType, data, function () {
+    domainEl.val("");
+    commentEl.val("");
+    wildcardEl.prop("checked", false);
+    group_utils.reload(table);
   });
 }
 
@@ -386,100 +344,64 @@ function editDomain() {
   var elem = $(this).attr("id");
   var tr = $(this).closest("tr");
   var id = tr.attr("data-id");
+  var oldtype = tr.attr("data-type");
   var domain = utils.escapeHtml(tr.find("#domain_" + id).text());
   var type = tr.find("#type_" + id).val();
-  var status = tr.find("#status_" + id).is(":checked") ? 1 : 0;
+  var enabled = tr.find("#status_" + id).is(":checked");
   var comment = utils.escapeHtml(tr.find("#comment_" + id).val());
+  var groups = tr
+    .find("#multiselect_" + id)
+    .val()
+    .map(function (val) {
+      return parseInt(val, 10);
+    });
 
-  // Show group assignment field only if in full domain management mode
-  // if not included, just use the row data.
-  var rowData = table.row(tr).data();
-  var groups = table.column(5).visible() ? tr.find("#multiselect_" + id).val() : rowData.groups;
-
-  var domainRegex;
-  if (type === "0" || type === "1") {
-    domainRegex = "domain";
-  } else if (type === "2" || type === "3") {
-    domainRegex = "regex";
-  }
+  var displayType = type.search("/exact$") !== -1 ? " domain" : " regex";
 
   var done = "edited";
   var notDone = "editing";
   switch (elem) {
     case "status_" + id:
-      if (status === 0) {
+      if (!enabled) {
         done = "disabled";
         notDone = "disabling";
-      } else if (status === 1) {
+      } else {
         done = "enabled";
         notDone = "enabling";
       }
 
       break;
     case "name_" + id:
-      done = "edited name of";
-      notDone = "editing name of";
+      done = "edited name of" + displayType;
+      notDone = "editing name of" + displayType;
       break;
     case "comment_" + id:
-      done = "edited comment of";
-      notDone = "editing comment of";
+      done = "edited comment of" + displayType;
+      notDone = "editing comment of" + displayType;
       break;
     case "type_" + id:
-      done = "edited type of";
-      notDone = "editing type of";
+      done = "edited type";
+      notDone = "editing type";
       break;
     case "multiselect_" + id:
-      done = "edited groups of";
-      notDone = "editing groups of";
+      done = "edited groups of" + displayType;
+      notDone = "editing groups of" + displayType;
       break;
     default:
       alert("bad element or invalid data-id!");
       return;
   }
 
-  utils.disableAll();
-  utils.showAlert("info", "", "Editing " + domainRegex + "...", name);
-  $.ajax({
-    url: "scripts/pi-hole/php/groups.php",
-    method: "post",
-    dataType: "json",
-    data: {
-      action: "edit_domain",
-      id: id,
-      type: type,
-      comment: comment,
-      status: status,
-      groups: groups,
-      token: token
-    },
-    success: function (response) {
-      utils.enableAll();
-      if (response.success) {
-        utils.showAlert(
-          "success",
-          "fas fa-pencil-alt",
-          "Successfully " + done + " " + domainRegex,
-          domain
-        );
-        table.ajax.reload(null, false);
-      } else
-        utils.showAlert(
-          "error",
-          "",
-          "Error while " + notDone + " " + domainRegex + " with ID " + id,
-          response.message
-        );
-    },
-    error: function (jqXHR, exception) {
-      utils.enableAll();
-      utils.showAlert(
-        "error",
-        "",
-        "Error while " + notDone + " " + domainRegex + " with ID " + id,
-        jqXHR.responseText
-      );
-      console.log(exception); // eslint-disable-line no-console
-    }
+  var data = JSON.stringify({
+    oldtype: oldtype,
+    comment: comment,
+    enabled: enabled,
+    groups: groups
+  });
+
+  var url = "/api/domains/" + type + "/" + encodeURIComponent(domain);
+  group_utils.editEntry(url, domain, displayType, data, done, notDone, function () {
+    group_utils.reload(table);
   });
 }
 
@@ -489,48 +411,9 @@ function deleteDomain() {
   var domain = utils.escapeHtml(tr.find("#domain_" + id).text());
   var type = tr.find("#type_" + id).val();
 
-  var domainRegex;
-  if (type === "0" || type === "1") {
-    domainRegex = "domain";
-  } else if (type === "2" || type === "3") {
-    domainRegex = "regex";
-  }
-
-  utils.disableAll();
-  utils.showAlert("info", "", "Deleting " + domainRegex + "...", domain);
-  $.ajax({
-    url: "scripts/pi-hole/php/groups.php",
-    method: "post",
-    dataType: "json",
-    data: { action: "delete_domain", id: id, token: token },
-    success: function (response) {
-      utils.enableAll();
-      if (response.success) {
-        utils.showAlert(
-          "success",
-          "far fa-trash-alt",
-          "Successfully deleted " + domainRegex,
-          domain
-        );
-        table.row(tr).remove().draw(false).ajax.reload(null, false);
-      } else {
-        utils.showAlert(
-          "error",
-          "",
-          "Error while deleting " + domainRegex + " with ID " + id,
-          response.message
-        );
-      }
-    },
-    error: function (jqXHR, exception) {
-      utils.enableAll();
-      utils.showAlert(
-        "error",
-        "",
-        "Error while deleting " + domainRegex + " with ID " + id,
-        jqXHR.responseText
-      );
-      console.log(exception); // eslint-disable-line no-console
-    }
+  var displayType = type.search("/exact$") !== -1 ? " domain" : " regex";
+  var url = "/api/domains/" + type + "/" + encodeURIComponent(domain);
+  group_utils.delEntry(url, domain, displayType, function () {
+    group_utils.reload(table);
   });
 }

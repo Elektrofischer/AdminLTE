@@ -5,6 +5,8 @@
  *  This file is copyright under the latest version of the EUPL.
  *  Please see LICENSE file for your rights under this license. */
 
+/* global onAuth:false, moment: false */
+
 //The following functions allow us to display time until pi-hole is enabled after disabling.
 //Works between all pages
 
@@ -94,6 +96,7 @@ function piholeChange(action, duration) {
 }
 
 function checkMessages() {
+  /*
   $.getJSON("api_db.php?status", function (data) {
     if ("message_count" in data && data.message_count > 0) {
       var title =
@@ -106,6 +109,7 @@ function checkMessages() {
       $("#pihole-diagnosis").removeClass("hidden");
     }
   });
+*/
 }
 
 function testCookies() {
@@ -203,7 +207,112 @@ function initCPUtemp() {
   }
 }
 
+function checkAuth() {
+  $.getJSON("/api/auth").done(function (data) {
+    if (typeof onAuth === "function") onAuth(data.session.valid);
+    if (data.session.valid) {
+      $(".needs-auth").show();
+      $(".menu-login").hide();
+    } else {
+      $(".needs-auth").hide();
+      $(".menu-login").show();
+    }
+  });
+}
+
+var infoTimer;
+function fetchInfo() {
+  $.ajax({
+    url: "/api/ftl/system"
+  }).done(function (data) {
+    updateInfo(data);
+
+    // Update every 5 seconds, clear timer first to make it safe to run this
+    // function more often
+    clearTimeout(infoTimer);
+    infoTimer = setTimeout(fetchInfo, 5000);
+  });
+}
+
+function updateInfo(data) {
+  var intl = new Intl.NumberFormat();
+  var ftl = data.ftl;
+  var system = data.system;
+  var memory = (100 * system.memory.ram.used) / system.memory.ram.total;
+  var totalGB = 1e-6 * system.memory.ram.total;
+  var swap =
+    system.memory.swap.total > 0
+      ? ((1e-6 * system.memory.swap.used) / system.memory.swap.total).toFixed(1) + " %"
+      : "N/A";
+  var color;
+  color = memory > 75 ? "text-red" : "text-green-light";
+  $("#memory").html(
+    '<i class="fa fa-circle ' +
+      color +
+      '"></i>&nbsp;Memory usage:&nbsp;' +
+      memory.toFixed(1) +
+      "&thinsp;%"
+  );
+  $("#memory").prop("title", "Total memory: " + totalGB.toFixed(1) + " GB, Swap usage: " + swap);
+
+  color = system.cpu.load.percent[0] > 100 ? "text-red" : "text-green-light";
+  $("#cpu").html(
+    '<i class="fa fa-circle ' +
+      color +
+      '"></i>&nbsp;CPU:&nbsp;' +
+      system.cpu.load.percent[0].toFixed(1) +
+      "&thinsp;%"
+  );
+  $("#cpu").prop(
+    "title",
+    "Load: " +
+      system.cpu.load.raw[0].toFixed(2) +
+      " " +
+      system.cpu.load.raw[1].toFixed(2) +
+      " " +
+      system.cpu.load.raw[2].toFixed(2) +
+      " on " +
+      system.cpu.nprocs +
+      " cores running " +
+      system.procs +
+      " processes"
+  );
+
+  if (system.sensors.length > 0) {
+    var temp = system.sensors[0].value.toFixed(1) + "&thinsp;&deg;C";
+    color = system.sensors[0].value > 50 ? "text-red" : "text-vivid-blue";
+    $("#temperature").html('<i class="fa fa-fire ' + color + '"></i>&nbsp;Temp:&nbsp;' + temp);
+  } else $("#temperature").html('<i class="fa fa-fire"></i>&nbsp;Temp:&nbsp;N/A');
+  var startdate = moment()
+    .subtract(system.uptime, "seconds")
+    .format("dddd, MMMM Do YYYY, HH:mm:ss");
+  $("#temperature").prop(
+    "title",
+    "System uptime: " +
+      moment.duration(1000 * system.uptime).humanize() +
+      " (running since " +
+      startdate +
+      ")"
+  );
+
+  if (system.dns.blocking === true) {
+    $("#status").html('<i class="fa fa-circle text-green-light"></i>&nbsp;Enabled');
+    $("#status").prop("title", intl.format(ftl.gravity) + " gravity domains loaded");
+  } else {
+    $("#status").html('<i class="fa fa-circle text-red"></i>&nbsp;Disabled');
+    $("#status").prop("title", "Not blocking");
+  }
+
+  $("#num_groups").text(parseInt(ftl.groups, 10));
+  $("#num_clients").text(parseInt(ftl.clients, 10));
+  $("#num_lists").text(parseInt(ftl.lists, 10));
+  $("#num_allowed").text(parseInt(ftl.domains.allowed, 10));
+  $("#num_denied").text(parseInt(ftl.domains.denied, 10));
+}
+
 $(function () {
+  checkAuth();
+  if (typeof window.indexPage === "undefined") fetchInfo();
   var enaT = $("#enableTimer");
   var target = new Date(parseInt(enaT.html(), 10));
   var seconds = Math.round((target.getTime() - Date.now()) / 1000);
@@ -252,49 +361,4 @@ $("#pihole-disable-custom").on("click", function (e) {
   var custVal = $("#customTimeout").val();
   custVal = $("#btnMins").hasClass("active") ? custVal * 60 : custVal;
   piholeChange("disable", custVal);
-});
-
-// Session timer
-var sessionTimerCounter = document.getElementById("sessiontimercounter");
-var sessionvalidity = parseInt(sessionTimerCounter.textContent, 10);
-var start = new Date();
-
-function updateSessionTimer() {
-  start = new Date();
-  start.setSeconds(start.getSeconds() + sessionvalidity);
-}
-
-if (sessionvalidity > 0) {
-  // setSeconds will correctly handle wrap-around cases
-  updateSessionTimer();
-
-  setInterval(function () {
-    var current = new Date();
-    var totalseconds = (start - current) / 1000;
-    var minutes = Math.floor(totalseconds / 60);
-    if (minutes < 10) {
-      minutes = "0" + minutes;
-    }
-
-    var seconds = Math.floor(totalseconds % 60);
-    if (seconds < 10) {
-      seconds = "0" + seconds;
-    }
-
-    if (totalseconds > 0) {
-      sessionTimerCounter.textContent = minutes + ":" + seconds;
-    } else {
-      sessionTimerCounter.textContent = "-- : --";
-    }
-  }, 1000);
-} else {
-  document.getElementById("sessiontimer").style.display = "none";
-}
-
-// Handle Strg + Enter button on Login page
-$(document).keypress(function (e) {
-  if ((e.keyCode === 10 || e.keyCode === 13) && e.ctrlKey && $("#loginpw").is(":focus")) {
-    $("#loginform").attr("action", "settings.php");
-    $("#loginform").submit();
-  }
 });

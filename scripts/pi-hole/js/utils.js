@@ -62,9 +62,9 @@ function padNumber(num) {
   return ("00" + num).substr(-2, 2);
 }
 
-var info = null; // TODO clear this up; there shouldn't be a global var here
 function showAlert(type, icon, title, message) {
   var opts = {};
+  var info;
   title = "&nbsp;<strong>" + title + "</strong><br>";
   switch (type) {
     case "info":
@@ -83,11 +83,8 @@ function showAlert(type, icon, title, message) {
         title: title,
         message: message
       };
-      if (info) {
-        info.update(opts);
-      } else {
-        $.notify(opts);
-      }
+      info = $.notify(opts);
+      info.update(opts);
 
       break;
     case "warning":
@@ -97,11 +94,8 @@ function showAlert(type, icon, title, message) {
         title: title,
         message: message
       };
-      if (info) {
-        info.update(opts);
-      } else {
-        $.notify(opts);
-      }
+      info = $.notify(opts);
+      info.update(opts);
 
       break;
     case "error":
@@ -111,15 +105,14 @@ function showAlert(type, icon, title, message) {
         title: "&nbsp;<strong>Error, something went wrong!</strong><br>",
         message: message
       };
-      if (info) {
-        info.update(opts);
-      } else {
-        $.notify(opts);
-      }
+      info = $.notify(opts);
+      info.update(opts);
 
       break;
     default:
   }
+
+  return info;
 }
 
 function datetime(date, html) {
@@ -248,6 +241,15 @@ function getGraphType() {
   return localStorage.getItem("barchart_chkbox") === "false" ? "line" : "bar";
 }
 
+function doLogout() {
+  $.ajax({
+    url: "/api/auth",
+    method: "DELETE"
+  }).always(function (data) {
+    if (data.status === 410) location.reload();
+  });
+}
+
 function addFromQueryLog(domain, list) {
   var token = $("#token").text();
   var alertModal = $("#alertModal");
@@ -323,6 +325,15 @@ function addFromQueryLog(domain, list) {
   });
 }
 
+function exists(data) {
+  return data !== null && data !== undefined;
+}
+
+function upper(s) {
+  if (typeof s !== "string") return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 window.utils = (function () {
   return {
     escapeHtml: escapeHtml,
@@ -341,6 +352,9 @@ window.utils = (function () {
     getGraphType: getGraphType,
     validateMAC: validateMAC,
     validateHostname: validateHostname,
-    addFromQueryLog: addFromQueryLog
+    doLogout: doLogout,
+    addFromQueryLog: addFromQueryLog,
+    exists: exists,
+    upper: upper
   };
 })();

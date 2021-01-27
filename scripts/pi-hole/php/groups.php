@@ -6,18 +6,6 @@
 *  This file is copyright under the latest version of the EUPL.
 *  Please see LICENSE file for your rights under this license. */
 
-require_once('auth.php');
-
-// Authentication checks
-if (!isset($api)) {
-    if (isset($_POST['token'])) {
-        check_cors();
-        check_csrf($_POST['token']);
-    } else {
-        log_and_die('Not allowed (login session invalid or expired, please relogin on the Pi-hole dashboard)!');
-    }
-}
-
 $reload = false;
 
 require_once('func.php');
@@ -52,7 +40,7 @@ if ($_POST['action'] == 'get_groups') {
 
         header('Content-type: application/json');
         echo json_encode(array('data' => $data));
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'add_group') {
@@ -96,7 +84,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'edit_group') {
@@ -137,14 +125,14 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'delete_group') {
     // Delete group identified by ID
     try {
-        $table_name = ['domainlist_by_group', 'client_by_group', 'adlist_by_group', 'group'];
-        $table_keys = ['group_id', 'group_id', 'group_id', 'id'];
+        $table_name = array('domainlist_by_group', 'client_by_group', 'adlist_by_group', 'group');
+        $table_keys = array('group_id', 'group_id', 'group_id', 'id');
         for ($i = 0; $i < count($table_name); $i++) {
             $table = $table_name[$i];
             $key = $table_keys[$i];
@@ -168,7 +156,7 @@ if ($_POST['action'] == 'get_groups') {
         }
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'get_clients') {
@@ -218,7 +206,7 @@ if ($_POST['action'] == 'get_groups') {
 
         header('Content-type: application/json');
         echo json_encode(array('data' => $data));
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'get_unconfigured_clients') {
@@ -239,8 +227,8 @@ if ($_POST['action'] == 'get_groups') {
 
             // Get possibly associated IP addresses and hostnames for this client
             $query_ips = $FTLdb->query("SELECT ip,name FROM network_addresses WHERE network_id = $id ORDER BY lastSeen DESC;");
-            $addresses = [];
-            $names = [];
+            $addresses = array();
+            $names = array();
             while ($res_ips = $query_ips->fetchArray(SQLITE3_ASSOC)) {
                 array_push($addresses, utf8_encode($res_ips["ip"]));
                 if($res_ips["name"] !== null)
@@ -296,7 +284,7 @@ if ($_POST['action'] == 'get_groups') {
 
         header('Content-type: application/json');
         echo json_encode($ips);
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'add_client') {
@@ -339,7 +327,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'edit_client') {
@@ -409,7 +397,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'delete_client') {
@@ -448,7 +436,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'get_domains') {
@@ -515,7 +503,7 @@ if ($_POST['action'] == 'get_groups') {
 
         header('Content-type: application/json');
         echo json_encode(array('data' => $data));
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'add_domain' || $_POST['action'] == 'replace_domain') {
@@ -705,7 +693,7 @@ if ($_POST['action'] == 'get_groups') {
         }
         $reload = true;
         JSON_success($msg);
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'edit_domain') {
@@ -789,7 +777,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'delete_domain') {
@@ -829,7 +817,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 }  elseif ($_POST['action'] == 'delete_domain_string') {
@@ -877,7 +865,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'get_adlists') {
@@ -905,7 +893,7 @@ if ($_POST['action'] == 'get_groups') {
 
         header('Content-type: application/json');
         echo json_encode(array('data' => $data));
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'add_adlist') {
@@ -964,7 +952,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'edit_adlist') {
@@ -1044,7 +1032,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'delete_adlist') {
@@ -1084,7 +1072,7 @@ if ($_POST['action'] == 'get_groups') {
 
         $reload = true;
         JSON_success();
-    } catch (\Exception $ex) {
+    } catch (Exception $ex) {
         JSON_error($ex->getMessage());
     }
 } elseif ($_POST['action'] == 'add_audit') {
@@ -1143,7 +1131,7 @@ if ($_POST['action'] == 'get_groups') {
             // Reloading isn't necessary for audit domains (no effect on blocking)
             $reload = false;
             JSON_success($msg);
-        } catch (\Exception $ex) {
+        } catch (Exception $ex) {
             JSON_error($ex->getMessage());
         }
 } else {

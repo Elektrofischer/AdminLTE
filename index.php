@@ -7,7 +7,6 @@
 *    Please see LICENSE file for your rights under this license. */
     $indexpage = true;
     require "scripts/pi-hole/php/header.php";
-    require_once "scripts/pi-hole/php/gravity.php";
 
     function getinterval()
     {
@@ -24,6 +23,7 @@
 ?>
 <!-- Sourceing CSS colors from stylesheet to be used in JS code -->
 <span class="queries-permitted"></span>
+<span class="queries-cached"></span>
 <span class="queries-blocked"></span>
 <span class="graphs-grid"></span>
 <span class="graphs-ticks"></span>
@@ -31,10 +31,10 @@
 <div class="row">
     <div class="col-lg-3 col-sm-6">
         <!-- small box -->
-        <div class="small-box bg-green no-user-select" id="total_queries" title="only A + AAAA queries">
+        <div class="small-box bg-green no-user-select" id="total_queries">
             <div class="inner">
-                <p>Total queries (<span id="unique_clients">-</span> clients)</p>
-                <h3 class="statistic"><span id="dns_queries_today">---</span></h3>
+                <p>Total queries (<span id="total_clients">-</span> clients)</p>
+                <h3 class="statistic"><span id="dns_queries">---</span></h3>
             </div>
             <div class="icon">
                 <i class="fas fa-globe-americas"></i>
@@ -47,7 +47,7 @@
         <div class="small-box bg-aqua no-user-select">
             <div class="inner">
                 <p>Queries Blocked</p>
-                <h3 class="statistic"><span id="queries_blocked_today">---</span></h3>
+                <h3 class="statistic"><span id="blocked_queries">---</span></h3>
             </div>
             <div class="icon">
                 <i class="fas fa-hand-paper"></i>
@@ -60,7 +60,7 @@
         <div class="small-box bg-yellow no-user-select">
             <div class="inner">
                 <p>Percent Blocked</p>
-                <h3 class="statistic"><span id="percentage_blocked_today">---</span></h3>
+                <h3 class="statistic"><span id="percent_blocked">---</span></h3>
             </div>
             <div class="icon">
                 <i class="fas fa-chart-pie"></i>
@@ -70,10 +70,10 @@
     <!-- ./col -->
     <div class="col-lg-3 col-sm-6">
         <!-- small box -->
-        <div class="small-box bg-red no-user-select" title="<?php echo gravity_last_update(); ?>">
+        <div class="small-box bg-red no-user-select">
             <div class="inner">
                 <p>Domains on Blocklist</p>
-                <h3 class="statistic"><span id="domains_being_blocked">---</span></h3>
+                <h3 class="statistic"><span id="gravity_size">---</span></h3>
             </div>
             <div class="icon">
                 <i class="fas fa-list-alt"></i>
@@ -101,16 +101,10 @@
       </div>
     </div>
 </div>
-<?php
-  // If the user is logged in, then we show the more detailed index page.
-  // Even if we would include them here anyhow, there would be nothing to
-  // show since the API will respect the privacy of the user if he defines
-  // a password
-  if($auth){ ?>
 
 <div class="row">
     <div class="col-md-12">
-    <div class="box" id="clients">
+    <div class="box" id="clients-over-time" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Client activity over last <?php echo getinterval(); ?> hours</h3>
         </div>
@@ -129,7 +123,7 @@
 
 <div class="row">
     <div class="col-md-6">
-    <div class="box" id="query-types-pie">
+    <div class="box" id="query-types-pie" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Query Types</h3>
         </div>
@@ -148,7 +142,7 @@
       </div>
     </div>
     <div class="col-md-6">
-    <div class="box" id="forward-destinations-pie">
+    <div class="box" id="forward-destinations-pie" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Queries answered by</h3>
         </div>
@@ -180,7 +174,7 @@ else
 ?>
 <div class="row">
     <div class="<?php echo $tablelayout; ?>">
-      <div class="box" id="domain-frequency">
+      <div class="box" id="domain-frequency" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Top Permitted Domains</h3>
         </div>
@@ -207,7 +201,7 @@ else
     </div>
     <!-- /.col -->
     <div class="<?php echo $tablelayout; ?>">
-      <div class="box" id="ad-frequency">
+      <div class="box" id="ad-frequency" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Top Blocked Domains</h3>
         </div>
@@ -236,7 +230,7 @@ else
 <div class="row">
     <!-- /.col -->
     <div class="<?php echo $tablelayout; ?>">
-      <div class="box" id="client-frequency">
+      <div class="box" id="client-frequency" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Top Clients (total)</h3>
         </div>
@@ -264,7 +258,7 @@ else
     <!-- /.col -->
     <!-- /.col -->
     <div class="<?php echo $tablelayout; ?>">
-      <div class="box" id="client-frequency-blocked">
+      <div class="box" id="client-frequency-blocked" hidden="true">
         <div class="box-header with-border">
           <h3 class="box-title">Top Clients (blocked only)</h3>
         </div>
@@ -292,7 +286,6 @@ else
     <!-- /.col -->
 </div>
 <!-- /.row -->
-<?php } ?>
 
 <script src="scripts/pi-hole/js/utils.js?v=<?=$cacheVer?>"></script>
 <script src="scripts/pi-hole/js/index.js?v=<?=$cacheVer?>"></script>
